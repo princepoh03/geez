@@ -1,0 +1,207 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+local CamlockState = false
+local AutoAirState = false
+
+-- Prediction values for more accurate tracking
+local Prediction = 0.1678963
+local JumpOffset = 0.08 -- Vertical jump offset
+local HorizontalPrediction = 0.1760773
+local VerticalPrediction = 0.09
+local XPrediction = 0.160692
+local YPrediction = 0.167092
+
+-- Key to toggle camera lock
+local CamlockKey = "q"
+
+function FindNearestEnemy()
+    local ClosestDistance, ClosestPlayer = math.huge, nil
+    local CenterPosition = Vector2.new(
+        game:GetService("GuiService"):GetScreenResolution().X / 2,
+        game:GetService("GuiService"):GetScreenResolution().Y / 2
+    )
+
+    for _, Player in ipairs(Players:GetPlayers()) do
+        if Player ~= LocalPlayer then
+            local Character = Player.Character
+            if Character and Character:FindFirstChild("HumanoidRootPart") and Character.Humanoid.Health > 0 then
+                local Position, IsVisibleOnViewport =
+                    workspace.CurrentCamera:WorldToViewportPoint(Character.HumanoidRootPart.Position)
+
+                if IsVisibleOnViewport then
+                    local Distance = (CenterPosition - Vector2.new(Position.X, Position.Y)).Magnitude
+                    if Distance < ClosestDistance then
+                        ClosestPlayer = Character.HumanoidRootPart
+                        ClosestDistance = Distance
+                    end
+                end
+            end
+        end
+    end
+
+    return ClosestPlayer
+end
+
+local enemy = nil
+-- Function to aim the camera at the nearest enemy's HumanoidRootPart
+RunService.RenderStepped:Connect(function()
+    if CamlockState and enemy then
+        local camera = workspace.CurrentCamera
+        local targetPosition = enemy.Position + (enemy.Velocity * getgenv().mist.Camlock.Prediction)
+        camera.CFrame = CFrame.new(camera.CFrame.Position, targetPosition)
+    end
+end)
+
+-- Key binding to toggle camlock on and off
+Mouse.KeyDown:Connect(function(k)
+    if k == CamlockKey then
+        CamlockState = not CamlockState
+        if CamlockState then
+            enemy = FindNearestEnemy()
+            if enemy then
+                game.StarterGui:SetCore("SendNotification", {
+                    Title = "MIST BETA",
+                    Text = "Locked On To - " .. Players:GetPlayerFromCharacter(enemy.Parent).DisplayName,
+                    Duration = 1,
+                })
+            end
+        else
+            enemy = nil
+        end
+    end
+end)
+
+-- GUI creation for Cam Lock
+local camLockGui = Instance.new("ScreenGui")
+local camLockFrame = Instance.new("Frame")
+local camLockButton = Instance.new("TextButton")
+
+-- Properties for the Cam Lock frame
+camLockFrame.Size = UDim2.new(0.2, 0, 0.2, 0)
+camLockFrame.Position = UDim2.new(0.75, 0, 0, 20)
+camLockFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+camLockFrame.BorderSizePixel = 5
+camLockFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
+camLockFrame.Draggable = true
+camLockFrame.Active = true
+camLockFrame.Parent = camLockGui
+
+-- Properties for the Cam Lock button
+camLockButton.Parent = camLockFrame
+camLockButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+camLockButton.BackgroundTransparency = 1
+camLockButton.BorderSizePixel = 0
+camLockButton.Position = UDim2.new(0.5, -75, 0.5, -22)
+camLockButton.Size = UDim2.new(0, 150, 0, 44)
+camLockButton.Font = Enum.Font.Gotham
+camLockButton.Text = "Toggle Mist.lol"
+camLockButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+camLockButton.TextScaled = true
+
+-- Toggle camlock via GUI button
+camLockButton.MouseButton1Click:Connect(function()
+    CamlockState = not CamlockState
+    if CamlockState then
+        camLockButton.Text = "MIST ON"
+        enemy = FindNearestEnemy()
+        if enemy then
+            game.StarterGui:SetCore("SendNotification", {
+                Title = "MIST BETA",
+                Text = "Locked On To - " .. Players:GetPlayerFromCharacter(enemy.Parent).DisplayName,
+                Duration = 1,
+            })
+        end
+    else
+        camLockButton.Text = "MIST OFF"
+        enemy = nil
+    end
+end)
+
+camLockGui.Parent = game.CoreGui
+
+-- GUI creation for Auto Air
+local autoAirGui = Instance.new("ScreenGui")
+local autoAirFrame = Instance.new("Frame")
+local autoAirButton = Instance.new("TextButton")
+
+-- Properties for the Auto Air frame
+autoAirFrame.Size = UDim2.new(0.1, 0, 0.2, 0)
+autoAirFrame.Position = UDim2.new(0, 0, 0, 50)
+autoAirFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+autoAirFrame.BorderSizePixel = 5
+autoAirFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
+autoAirFrame.Draggable = true
+autoAirFrame.Active = true
+autoAirFrame.Parent = autoAirGui
+
+-- Properties for the Auto Air button
+autoAirButton.Parent = autoAirFrame
+autoAirButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+autoAirButton.BackgroundTransparency = 1
+autoAirButton.BorderSizePixel = 0
+autoAirButton.Position = UDim2.new(0.5, -35, 0.5, -22)
+autoAirButton.Size = UDim2.new(0, 70, 0, 44)
+autoAirButton.Font = Enum.Font.Gotham
+autoAirButton.Text = "Toggle Auto Air"
+autoAirButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+autoAirButton.TextScaled = true
+
+-- Variable to track if the tool has already been activated
+local toolActivated = false
+
+-- Function to check if the player is airborne
+local function IsPlayerAirborne(humanoid)
+    local rootPart = humanoid.Parent:FindFirstChild("HumanoidRootPart")
+    if rootPart then
+        local velocityY = rootPart.Velocity.Y
+        local groundedStates = {
+            Enum.HumanoidStateType.Landed,
+            Enum.HumanoidStateType.Running,
+            Enum.HumanoidStateType.Climbing,
+            Enum.HumanoidStateType.Swimming
+        }
+
+        local isAirborne = math.abs(velocityY) > 2
+        local isGrounded = table.find(groundedStates, humanoid:GetState()) ~= nil
+
+        return isAirborne and not isGrounded
+    end
+    return false
+end
+
+-- Function to handle Auto Air logic
+local function AutoAir()
+    if AutoAirState and CamlockState and enemy then
+        local enemyHumanoid = enemy.Parent and enemy.Parent:FindFirstChild("Humanoid")
+        local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
+
+        if enemyHumanoid and tool then
+            if IsPlayerAirborne(enemyHumanoid) and not toolActivated then
+                wait(0.1)
+                tool:Activate()
+                toolActivated = true
+            elseif not IsPlayerAirborne(enemyHumanoid) then
+                toolActivated = false
+            end
+        end
+    end
+end
+
+-- Continuously check the Auto Air logic on every frame
+RunService.RenderStepped:Connect(AutoAir)
+
+-- Toggle Auto Air via GUI button
+autoAirButton.MouseButton1Click:Connect(function()
+    AutoAirState = not AutoAirState
+    if AutoAirState then
+        autoAirButton.Text = "Auto Air ON"
+    else
+        autoAirButton.Text = "Auto Air OFF"
+    end
+end)
+
+if getgenv().mist.AutoAir.toggle then
+    autoAirGui.Parent = game.CoreGui
+end
